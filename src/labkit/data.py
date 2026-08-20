@@ -26,6 +26,7 @@ supervised because it is the model's stop signal.
 from __future__ import annotations
 
 import statistics
+import warnings
 from dataclasses import dataclass, field
 
 IGNORE_INDEX = -100
@@ -162,8 +163,15 @@ def _skip_reasoning_chars(text: str, start: int, end: int, think_close: str) -> 
     """Move `start` past a closing reasoning tag inside text[start:end), if present.
 
     Character-based for the same reason as the main path: tag boundaries do not align
-    with token boundaries. Qwen3.5 emits `<think>\n\n</think>\n\n` even for a
-    non-reasoning answer, so this fires on ordinary data too.
+    with token boundaries.
+
+    **When this actually fires.** Qwen3.5 does emit `<think>\n\n</think>\n\n` for a
+    non-reasoning answer — but it emits it as part of the *generation prompt*, i.e.
+    inside `prefix_text`. So `start` is already past `</think>` and there is nothing
+    left in `[start, end)` to skip: on a corpus of plain answers `masked-think` and
+    `response-only` produce a mask identical to `assistant-only`. This only does work
+    when the assistant *content* carries its own reasoning block, which is what a
+    §13.5 experiment needs its training data to look like.
     """
     at = text.find(think_close, start, end)
     if at == -1:
@@ -275,6 +283,7 @@ def to_training_dataset(
     max_length: int = 1024,
     mask_mode: str = "assistant-only",
     enable_thinking: bool | None = None,
+    think_open: str = "<think>",
 ) -> list[dict]:
     """Pre-tokenize records into {input_ids, labels} using the mask NB1 verified.
 
@@ -291,6 +300,26 @@ def to_training_dataset(
     examples and would invalidate the label alignment). Correctness of the mask outranks
     the throughput here.
     """
+    # `masked-think` and `response-only` differ from `assistant-only` only when the
+    # assistant CONTENT carries its own reasoning block. Qwen3.5's generation prompt
+    # already closes an empty `<think></think>`, so on a corpus of plain answers the
+    # skip has nothing left to skip and all three modes emit an identical mask — see
+    # `_skip_reasoning_chars`. The shipped triage corpus is exactly that: 250 bare-JSON
+    # answers. A student who sets MASK_MODE for the §13.5 contrast would otherwise see
+    # no difference and no reason why, so say it out loud instead of being silently inert.
+    if mask_mode in ("masked-think", "response-only"):
+        if not any(think_open in (r.get("output") or "") for r in records):
+            warnings.warn(
+                f"mask_mode={mask_mode!r} is a no-op on this corpus: none of the "
+                f"{len(records)} records carry a {think_open} block in their answer, "
+                "and the chat template closes its empty reasoning block inside the "
+                "generation prompt. The resulting mask is identical to 'assistant-only'. "
+                "Exercising deck §13.5 needs training answers that contain real traces "
+                "— see 'Đổi dataset của riêng bạn' in README.md.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+
     out: list[dict] = []
     for r in records:
         ex = build_example(

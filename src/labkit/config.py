@@ -165,4 +165,16 @@ CONTRAST_KEYS = ["attn_only", "wrong_lr", "qlora"]
 # free-Colab T4 at 48.5 s/step that is 48 minutes per contrast -- and 2x the 30 steps
 # NB3 actually runs, so every contrast was being trained twice as long as the baseline
 # it is compared against.
-CONTRAST_EPOCHS = 2.0
+#
+# F-17's fix replaced the 60 with a derived budget, but derived it from a hardcoded 2.0
+# while NB3 kept reading $EPOCHS -- so the two sides agreed only at the default.
+# `.env.example` invites EPOCHS=1..3, and at EPOCHS=3 NB3 runs 87 steps while every
+# contrast still ran 58: the same unfairness F-17 removed, reintroduced by anyone who
+# touched the knob the docs offer them. Both sides now read ONE value.
+TRAIN_EPOCHS = float(os.environ.get("EPOCHS", 2))
+
+# NB4's contrasts must run the SAME number of optimizer steps as NB3's `correct` run.
+# This is an alias, not an independent setting: if you make it independent again, make
+# `verify.py`'s step-parity check independent too, or the autopsy silently measures
+# step budget instead of configuration.
+CONTRAST_EPOCHS = TRAIN_EPOCHS

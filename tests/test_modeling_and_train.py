@@ -248,7 +248,14 @@ def test_padding_free_on_sets_max_length_none(monkeypatch):
 
 def test_emulated_bf16_does_not_count_as_bf16_support(monkeypatch):
     """F-15: torch.cuda.is_bf16_supported() defaults to including_emulation=True and
-    returns True on a T4. Capability >= 8.0 is the real test."""
+    returns True on a T4. Capability >= 8.0 is the real test.
+
+    Skipped without torch: `requirements-cpu.txt` ships no torch by design, and this is
+    the only test in the suite that needs it. An unguarded import here made
+    `make setup-cpu && make smoke` report "Not ready to submit" for every student
+    working the GPU-less slice the README recommends starting from.
+    """
+    torch = pytest.importorskip("torch")
     from labkit import device
 
     class _Props:
@@ -275,7 +282,6 @@ def test_emulated_bf16_does_not_count_as_bf16_support(monkeypatch):
         def is_bf16_supported(including_emulation=True):
             return True                        # what torch actually does on a T4
 
-    import torch
     monkeypatch.setattr(torch, "cuda", _FakeCuda)
     info = device.describe()
     assert info["capability"] == "7.5"

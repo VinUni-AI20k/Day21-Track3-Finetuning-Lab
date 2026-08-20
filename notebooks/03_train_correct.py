@@ -33,7 +33,7 @@ sys.path.insert(0, str(pathlib.Path.cwd() / "src"))
 sys.path.insert(0, str(pathlib.Path.cwd().parent / "src"))
 
 from labkit import data, device, generate, modeling, report, train
-from labkit.config import SPECS, get_tier
+from labkit.config import SPECS, TRAIN_EPOCHS, get_tier
 
 ROOT = pathlib.Path.cwd() if (pathlib.Path.cwd() / "data").exists() else pathlib.Path.cwd().parent
 TIER = get_tier(os.environ.get("COMPUTE_TIER", "T4"))
@@ -111,12 +111,20 @@ assert 0 < sup < tot, "mask covers nothing or everything — stop and re-run NB1
 from peft import LoraConfig
 from trl import SFTConfig, SFTTrainer
 
-EPOCHS = float(os.environ.get("EPOCHS", 2))
+# Imported, not re-read from the environment: NB4 derives its contrast step budget
+# from this same value, and two independent readings of $EPOCHS is exactly how the
+# contrasts drifted to a different budget than the baseline they are compared with.
+EPOCHS = TRAIN_EPOCHS
+# NB4 runs its contrasts at exactly this many steps -- see labkit.config.CONTRAST_EPOCHS.
+# Recorded in results/runs.csv so `verify.py` can prove the budgets matched, rather
+# than asking the reader to trust that they did.
+PLANNED_STEPS = train.planned_steps(len(rows), TIER, EPOCHS)
+print(f"planned optimizer steps: {PLANNED_STEPS}  ({EPOCHS} epochs x {len(rows)} rows)")
+
 want_sft = train.sft_config_kwargs(
     TIER, SPEC, output_dir=str(ROOT / "adapters" / SPEC.key),
     num_train_epochs=EPOCHS, mask_mode=MASK_MODE,
-    # NB4 runs its contrasts at exactly this many steps -- see labkit.config.CONTRAST_EPOCHS.
-    total_steps=train.planned_steps(len(rows), TIER, EPOCHS),
+    total_steps=PLANNED_STEPS,
 )
 sft_kwargs, dropped = train.filter_kwargs(SFTConfig, want_sft, label="SFTConfig")
 if dropped:
@@ -159,6 +167,8 @@ print("saved ->", out)
 row = train.summarize_run(SPEC, TIER, targets, trainable, elapsed, generate.peak_vram_gb())
 row["final_loss"] = round(result.training_loss, 4)
 row["mask_mode"] = MASK_MODE
+row["max_steps"] = PLANNED_STEPS
+row["epochs"] = EPOCHS
 report.append_row(row, results_dir=ROOT / "results")
 print(json.dumps(row, ensure_ascii=False, indent=2))
 

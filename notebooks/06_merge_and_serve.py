@@ -22,7 +22,14 @@ TIER = get_tier(os.environ.get("COMPUTE_TIER", "T4"))
 def load_jsonl(p):
     return [json.loads(l) for l in open(p, encoding="utf-8") if l.strip()]
 
-target = load_jsonl(ROOT / "data" / "eval_target.jsonl")[:int(os.environ.get("EVAL_LIMIT", "20"))]
+# EVAL_LIMIT=0 (unset) means the FULL set here, exactly as it does in NB2 and NB5.
+# It used to default to 20, so an unabridged run silently scored this notebook's
+# no-regression assert on 20 of 50 items while every other notebook used all of them.
+EVAL_LIMIT = int(os.environ.get("EVAL_LIMIT", "0") or 0)
+target = load_jsonl(ROOT / "data" / "eval_target.jsonl")
+if EVAL_LIMIT:
+    target = target[:EVAL_LIMIT]
+print(f"scoring merge check on {len(target)} target items")
 
 # %% [markdown]
 # ## 1. Điểm TRƯỚC merge

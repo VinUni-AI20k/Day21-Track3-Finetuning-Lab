@@ -49,7 +49,14 @@ def main(argv: list[str]) -> int:
         print(f"{name.upper()} — {desc}", flush=True)
         print("=" * 72, flush=True)
         t0 = time.perf_counter()
-        rc = subprocess.run([sys.executable, script], cwd=ROOT).returncode
+        # `-u` is load-bearing, not decoration. Without it CPython block-buffers stdout
+        # whenever it is a pipe -- which is what Colab, `tee`, and any redirect give the
+        # child -- so `print()` output sits in an 8 KB buffer while stderr flows freely.
+        # That silences exactly the per-batch ETA lines F-08 added to stop students
+        # killing healthy runs, and reproduces the hang-that-isn't this file's docstring
+        # claims to prevent. Observed: >3 minutes of stdout silence during NB2.
+        env = {**os.environ, "PYTHONUNBUFFERED": "1"}
+        rc = subprocess.run([sys.executable, "-u", script], cwd=ROOT, env=env).returncode
         dt = time.perf_counter() - t0
         timings.append((name, dt))
         if rc != 0:

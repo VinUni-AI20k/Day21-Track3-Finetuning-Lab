@@ -200,14 +200,21 @@ def regression_gate(
     target_delta = tuned.target - optimized_baseline.target
     regression_delta = tuned.regression - optimized_baseline.regression
 
+    # The verdict is derived from the numbers, not from the prose that explains them.
+    # This used to be `not any(r.startswith(("target", "general")) for r in reasons)` --
+    # correct, but only for as long as nobody reworded a message. A graded pass/fail
+    # decided by string prefixes is the same class of quiet failure this lab is about.
+    beat_baseline = target_delta > min_gain
+    kept_capability = regression_delta >= -tolerance
+
     reasons: list[str] = []
-    if target_delta <= min_gain:
+    if not beat_baseline:
         reasons.append(
             f"target task did not beat the optimized-prompt baseline "
             f"({tuned.target:.3f} vs {optimized_baseline.target:.3f}, delta {target_delta:+.3f}). "
             "A fine-tune that loses to a better prompt is not a fine-tune you should ship."
         )
-    if regression_delta < -tolerance:
+    if not kept_capability:
         reasons.append(
             f"general capability regressed by {abs(regression_delta):.3f} "
             f"(tolerance {tolerance:.3f}). See deck §14.3 — add 1-5% replay data."
@@ -218,7 +225,7 @@ def regression_gate(
             f"{regression_delta:+.3f} general-capability change."
         )
     return Verdict(
-        passed=not any(r.startswith(("target", "general")) for r in reasons),
+        passed=beat_baseline and kept_capability,
         reasons=reasons,
         target_delta=target_delta,
         regression_delta=regression_delta,
