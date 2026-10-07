@@ -32,7 +32,11 @@ def check(name: str, status: str, detail: str = "") -> None:
 
 
 def _sha(path: pathlib.Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()[:16]
+    # Git may check out these text datasets with CRLF on Windows even though the
+    # frozen checksums were recorded from LF files. Normalize line endings so a
+    # platform conversion is not mistaken for an edited evaluation set.
+    content = path.read_bytes().replace(b"\r\n", b"\n")
+    return hashlib.sha256(content).hexdigest()[:16]
 
 
 def _load_json(path: pathlib.Path):

@@ -22,6 +22,20 @@ import pytest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
+def test_verify_checksums_ignore_windows_line_endings(tmp_path):
+    spec = importlib.util.spec_from_file_location(
+        "verify_script", ROOT / "scripts" / "verify.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    lf = tmp_path / "lf.jsonl"
+    crlf = tmp_path / "crlf.jsonl"
+    lf.write_bytes(b'{"row":1}\n{"row":2}\n')
+    crlf.write_bytes(b'{"row":1}\r\n{"row":2}\r\n')
+
+    assert mod._sha(lf) == mod._sha(crlf)
+
+
 def _bootstrap() -> str:
     """BOOTSTRAP out of scripts/build_colab.py (not a package — load it by path)."""
     spec = importlib.util.spec_from_file_location(
