@@ -1,11 +1,19 @@
 """Placement resolution, parameter accounting, and version-defensive config building."""
 import dataclasses
+import importlib
 import pathlib
 import warnings
 
 import pytest
 from labkit import modeling, train
 from labkit.config import EPOCHS_DEFAULT, SPECS, TIERS, get_tier, training_epochs
+
+
+def _torch_or_skip():
+    try:
+        return importlib.import_module("torch")
+    except (ImportError, OSError, RuntimeError) as exc:
+        pytest.skip(f"usable torch installation unavailable: {exc}")
 
 
 class _Lin:
@@ -279,7 +287,7 @@ def test_emulated_bf16_does_not_count_as_bf16_support(monkeypatch):
     # importorskip, not a bare import: this test needs a real torch module to patch
     # `cuda` onto, and a machine without torch should report SKIP, not FAIL. A suite with
     # a permanently-red test teaches people to ignore red.
-    torch = pytest.importorskip("torch")
+    torch = _torch_or_skip()
     monkeypatch.setattr(torch, "cuda", _FakeCuda)
     info = device.describe()
     assert info["capability"] == "7.5"
@@ -360,7 +368,7 @@ def test_epoch_budget_falls_back_cleanly(monkeypatch):
 # then raises NotImplementedError from a CUDA kernel with no BFloat16 overload.
 
 def test_bf16_trainables_are_recast_for_the_fp16_scaler(monkeypatch):
-    torch = pytest.importorskip("torch")
+    torch = _torch_or_skip()
     from labkit import device
 
     class _Model:
@@ -383,7 +391,7 @@ def test_bf16_trainables_are_recast_for_the_fp16_scaler(monkeypatch):
 
 
 def test_precision_alignment_is_a_noop_off_fp16(monkeypatch):
-    torch = pytest.importorskip("torch")
+    torch = _torch_or_skip()
     from labkit import device
 
     class _Model:

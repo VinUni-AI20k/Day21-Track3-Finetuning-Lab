@@ -20,7 +20,7 @@ def describe() -> dict:
             "capability": None, "vram_gb": None}
     try:
         import torch
-    except ImportError:                                   # pragma: no cover
+    except (ImportError, OSError, RuntimeError):         # pragma: no cover
         return info
 
     if torch.cuda.is_available():
